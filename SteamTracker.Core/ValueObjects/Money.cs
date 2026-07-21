@@ -1,3 +1,5 @@
+namespace SteamTracker.Core.ValueObjects;
+
 public readonly record struct Money
 {
     public decimal Amount { get; }
@@ -5,8 +7,7 @@ public readonly record struct Money
 
     public Money(decimal amount, string currency)
     {
-
-      if (amount < 0)
+        if (amount < 0)
             throw new ArgumentOutOfRangeException(nameof(amount), "Preço não pode ser negativo.");
         if (string.IsNullOrWhiteSpace(currency))
             throw new ArgumentException("Moeda é obrigatória.", nameof(currency));
@@ -15,5 +16,5 @@ public readonly record struct Money
         Currency = currency.ToUpperInvariant();
     }
 
-        public override string ToString() => $"{Amount:0.00} {Currency}";
+    public override string ToString() => $"{Amount:0.00} {Currency}";
 }
