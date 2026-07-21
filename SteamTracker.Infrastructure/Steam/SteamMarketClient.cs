@@ -58,7 +58,7 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
     /// Converte "R$ 4,50" em Money. A Steam manda símbolo, milhar e
     /// decimal com vírgula — extraímos só os dígitos e o separador.
     /// </summary>
-    private static Money? ParsePrice(string? raw, string currency)
+    internal static Money? ParsePrice(string? raw, string currency)
     {
         if (string.IsNullOrWhiteSpace(raw))
             return null;
@@ -80,7 +80,7 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
     }
 
     /// <summary>Converte "1,234" (volume) em inteiro.</summary>
-    private static int? ParseVolume(string? raw)
+    internal static int? ParseVolume(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
             return null;

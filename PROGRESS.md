@@ -128,20 +128,52 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   o risco de shadow-ban do IP de teste.
 - Compila limpo. Commitado.
 
+### ✅ Semana 1, Dia 6 — Testes automatizados
+- Novo projeto `SteamTracker.Tests` (xUnit), referenciando Core e
+  Infrastructure, adicionado à solution.
+- **Parser de preço/volume**: `ParsePrice`/`ParseVolume` (em
+  `SteamMarketClient`) mudaram de `private` pra `internal static`, com
+  `InternalsVisibleTo("SteamTracker.Tests")` no csproj da Infrastructure —
+  evita reflection, mantém a superfície pública intacta.
+  - Cobertura: formato brasileiro (milhar com ponto, decimal com vírgula),
+    entrada nula/vazia/sem dígitos, volume com separador de milhar.
+  - Um teste (`ParsePrice_FormatoAmericano_LimitacaoConhecida`) caracteriza
+    de propósito o comportamento **errado** atual em moedas tipo USD (ponto
+    como decimal) — documenta a limitação já anotada acima em vez de
+    escondê-la, e vai falhar (sinalizando trabalho pendente) quando o parser
+    ganhar suporte a múltiplas moedas.
+- **Pipeline de resiliência**: `DependencyInjection.ConfigureSteamResilience`
+  foi quebrado em `CreateRetryOptions()` e `CreateCircuitBreakerOptions()`
+  (também `internal static`), permitindo montar pipelines de teste sem
+  `HttpClient` real e sem esperar os delays de produção (retry usa 2s/4s/8s
+  de backoff — nos testes, as opções são reconstruídas com delay de 1ms,
+  reusando o predicado real `IsTransientFailure`).
+  - Cobertura: classificação de status transiente (429/5xx → true, 2xx/4xx
+    exceto 429 → false; exceção → sempre true); valores de configuração
+    (MaxRetryAttempts, backoff, jitter, FailureRatio, MinimumThroughput);
+    retry esgota tentativas em falha persistente e não retenta em sucesso;
+    circuit breaker abre após ultrapassar o limiar e rejeita chamada
+    seguinte com `BrokenCircuitException`.
+- **28 testes, todos passando, suite roda em ~300ms** (sem timers reais nem
+  chamada de rede — só a configuração de produção reaproveitada com delays
+  reduzidos).
+- Compila limpo (solução inteira, 5 projetos). Ainda não commitado.
+
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 6
+## ⏭️ PRÓXIMO: Semana 1, Dia 7
 
-A decidir na próxima sessão. Candidatos plausíveis dado o histórico: testes
-automatizados (parser de preço + pipeline de resiliência), ou persistência
-(EF Core + PostgreSQL, adiantando a Semana 3). O arquivo
-`backlog-steam-tracker-v2.md` referenciado no topo deste documento não está
-no repo — vale confirmar se existe em outro lugar ou recriar o roadmap.
+Candidato mais forte: persistência (EF Core + PostgreSQL), adiantando a
+Semana 3 — dá pra guardar `TrackedItem`/`PriceSnapshot`/`Alert` de verdade
+em vez de só consultar preço on-demand. O arquivo
+`backlog-steam-tracker-v2.md` referenciado no topo deste documento continua
+sem existir no repo — vale confirmar se existe em outro lugar ou recriar o
+roadmap.
 
 ---
 
 ## Como retomar
 
 Em qualquer ferramenta nova, diga:
-> "Estamos no Dia 4 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
+> "Estamos no Dia 6 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
 > no repo e continue daí."
