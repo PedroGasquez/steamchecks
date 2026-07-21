@@ -105,14 +105,38 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   que já estava documentado como risco conhecido.
 - **Compila limpo. Ainda não commitado** (ver `git status`).
 
+### ✅ Semana 1, Dia 5 — Resiliência (Polly)
+- Motivação: durante o teste do Dia 4, a própria Steam devolveu
+  `{"success":true}` sem os campos de preço no meio de testes normais —
+  confirmando na prática o risco de rate limit já documentado.
+- Pacote `Microsoft.Extensions.Http.Resilience` (v10.8.0, construído sobre
+  Polly v8) adicionado à Infrastructure.
+- `AddInfrastructure` encadeia `.AddResilienceHandler("steam-market", ...)`
+  no `HttpClient` tipado com 3 estratégias:
+  - **Retry**: até 3 tentativas, backoff exponencial com jitter, dispara em
+    429 (Too Many Requests), 5xx, ou exceção de transporte.
+  - **Circuit breaker**: `MinimumThroughput = 4` e `FailureRatio = 0.5` numa
+    janela de 30s (limiar baixo de propósito — é um tracker pessoal de baixo
+    volume, não um scraper; os defaults do Microsoft.Extensions.Http.Resilience
+    exigem tráfego alto demais pra disparar nesse caso de uso).
+  - **Timeout** por tentativa: 10s.
+- Predicado de falha transitória (`IsTransientFailure`) é explícito, não usa
+  os presets padrão do pacote — mantém a decisão de "o que é falha" visível
+  e alinhada ao risco documentado (429/shadow-ban), não genérica.
+- **Testado ponta a ponta de novo** (endpoint ainda funciona igual no
+  caminho feliz). Não foi forçado um 429 real de propósito, pra não piorar
+  o risco de shadow-ban do IP de teste.
+- Compila limpo. Commitado.
+
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 5
+## ⏭️ PRÓXIMO: Semana 1, Dia 6
 
-Definir o próximo passo com o backlog (`backlog-steam-tracker-v2.md`) — não
-detalhado ainda nesta sessão. Candidatos plausíveis dado o histórico: testes
-automatizados do parser de preço (`ParsePrice`/`ParseVolume`) e do endpoint,
-ou avançar pra persistência (EF Core + PostgreSQL, adiantando a Semana 3).
+A decidir na próxima sessão. Candidatos plausíveis dado o histórico: testes
+automatizados (parser de preço + pipeline de resiliência), ou persistência
+(EF Core + PostgreSQL, adiantando a Semana 3). O arquivo
+`backlog-steam-tracker-v2.md` referenciado no topo deste documento não está
+no repo — vale confirmar se existe em outro lugar ou recriar o roadmap.
 
 ---
 
