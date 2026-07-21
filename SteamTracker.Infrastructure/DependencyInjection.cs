@@ -1,16 +1,19 @@
 using System.Net;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
 using SteamTracker.Core.Abstractions;
+using SteamTracker.Infrastructure.Persistence;
 using SteamTracker.Infrastructure.Steam;
 
 namespace SteamTracker.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddHttpClient<ISteamMarketClient, SteamMarketClient>(client =>
             {
@@ -19,6 +22,12 @@ public static class DependencyInjection
                     "SteamTrackerV2/1.0 (+https://github.com/PedroGasquez/steamchecks)");
             })
             .AddResilienceHandler("steam-market", ConfigureSteamResilience);
+
+        var connectionString = configuration.GetConnectionString("SteamTracker")
+            ?? throw new InvalidOperationException(
+                "Connection string 'SteamTracker' não configurada (ver ConnectionStrings em appsettings).");
+
+        services.AddDbContext<SteamTrackerDbContext>(options => options.UseNpgsql(connectionString));
 
         return services;
     }

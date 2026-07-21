@@ -157,23 +157,74 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
 - **28 testes, todos passando, suite roda em ~300ms** (sem timers reais nem
   chamada de rede — só a configuração de produção reaproveitada com delays
   reduzidos).
-- Compila limpo (solução inteira, 5 projetos). Ainda não commitado.
+- Compila limpo (solução inteira, 5 projetos). Commitado.
+
+### ✅ Semana 1, Dia 7 — Persistência (EF Core + PostgreSQL)
+- Adiantada a Semana 3 do stack original. Pacotes: `Npgsql.EntityFrameworkCore.PostgreSQL`
+  9.0.4 na Infrastructure (a versão mais nova, 10.x, só suporta net10 — presa
+  em 9.0.4 pra bater com o TargetFramework net9.0 do resto da solução);
+  `Microsoft.EntityFrameworkCore.Design` 9.0.1 na Api (só ela precisa, é o
+  startup project usado pela ferramenta `dotnet ef`).
+- **`dotnet-ef` instalado como ferramenta local** (`.config/dotnet-tools.json`,
+  `dotnet tool restore` depois de clonar), não global — reprodutível em
+  qualquer máquina sem depender de instalação prévia do dev.
+- `SteamTrackerDbContext` (em `Infrastructure/Persistence/`) com
+  `DbSet<TrackedItem>`, `DbSet<PriceSnapshot>`, `DbSet<Alert>`, configurações
+  via `IEntityTypeConfiguration<T>` aplicadas por assembly scan.
+- **Mapeamento de `Money` (value object, `readonly record struct`) foi a
+  parte espinhosa do dia** — duas armadilhas reais do EF Core 9.x, não só
+  escolha de API:
+  - `ComplexProperty` (Complex Types, EF 8+) mapeia o `Money` **obrigatório**
+    (`PriceSnapshot.LowestPrice`) em duas colunas reais (`Amount`, `Currency`)
+    sem tabela própria — funciona bem pra campo obrigatório.
+  - Pra `Money?` **opcional** (`PriceSnapshot.MedianPrice`,
+    `Alert.TargetPrice`), nem Complex Type nem Owned Type serviram: Complex
+    Type opcional não é suportado no EF Core 9.x pra propriedade de valor
+    (erro explícito ao gerar migration, ver
+    github.com/dotnet/efcore/issues/31376); Owned Type (`OwnsOne`) exige tipo
+    referência, e `Money` é struct de propósito (decisão do Dia 2, não
+    revisitada). Solução: `HasConversion` serializando o `Money?` inteiro
+    como uma coluna `jsonb` — perde filtro nativo por `Amount` via SQL direto
+    nessas duas colunas, aceitável porque nenhuma delas é hoje consultada
+    fora de C# (`MedianPrice` é só exibido; `TargetPrice` é comparado pelo
+    Worker em memória, não em query).
+- Índice único em `TrackedItem(AppId, MarketHashName)` (mesmo item não pode
+  ser rastreado duas vezes); índice em `PriceSnapshot(TrackedItemId,
+  CapturedAt)` (consulta mais comum: histórico ordenado no tempo).
+- `AddInfrastructure` passou a exigir `IConfiguration` (assinatura mudou —
+  `Program.cs` da Api e do Worker atualizados) e lê `ConnectionStrings:SteamTracker`,
+  lançando se não configurada. Connection string de desenvolvimento local
+  (`Host=localhost;...;Password=postgres`) commitada em
+  `appsettings.Development.json` da Api e do Worker — senha fraca de
+  propósito, é só pra Postgres local/container, nunca produção.
+- Migration inicial gerada: `dotnet ef migrations add InitialCreate --project
+  SteamTracker.Infrastructure --startup-project SteamTracker.Api --output-dir
+  Persistence/Migrations`.
+- **Limitação conhecida**: não havia Docker nem Postgres local disponíveis
+  nesta sessão pra rodar `dotnet ef database update` de verdade — a migration
+  foi gerada e revisada manualmente (SQL faz sentido: tabelas, FKs com
+  cascade, índices, tipos de coluna corretos), mas **nunca foi aplicada
+  contra um banco real**. Primeira tarefa da próxima sessão com Postgres
+  disponível: validar isso de ponta a ponta.
+- Compila limpo (solução inteira, 5 projetos), suite de testes do Dia 6
+  continua passando (28/28). Ainda não commitado.
 
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 7
+## ⏭️ PRÓXIMO: Semana 1, Dia 8
 
-Candidato mais forte: persistência (EF Core + PostgreSQL), adiantando a
-Semana 3 — dá pra guardar `TrackedItem`/`PriceSnapshot`/`Alert` de verdade
-em vez de só consultar preço on-demand. O arquivo
-`backlog-steam-tracker-v2.md` referenciado no topo deste documento continua
-sem existir no repo — vale confirmar se existe em outro lugar ou recriar o
-roadmap.
+Candidatos: (1) validar a migration contra um Postgres real (Docker ou
+instalação local) e rodar `dotnet ef database update`; (2) consumir a
+persistência de verdade — endpoint `POST /api/items` pra criar
+`TrackedItem`, e o Worker gravando `PriceSnapshot` a cada consulta ao invés
+de só retornar o preço on-demand. O arquivo `backlog-steam-tracker-v2.md`
+referenciado no topo deste documento continua sem existir no repo — vale
+confirmar se existe em outro lugar ou recriar o roadmap.
 
 ---
 
 ## Como retomar
 
 Em qualquer ferramenta nova, diga:
-> "Estamos no Dia 6 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
+> "Estamos no Dia 7 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
 > no repo e continue daí."
