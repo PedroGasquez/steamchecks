@@ -24,6 +24,8 @@ public static class DependencyInjection
             })
             .AddResilienceHandler("steam-market", ConfigureSteamResilience);
 
+        services.Configure<SteamMarketOptions>(configuration.GetSection("SteamMarket"));
+
         var connectionString = configuration.GetConnectionString("SteamTracker")
             ?? throw new InvalidOperationException(
                 "Connection string 'SteamTracker' não configurada (ver ConnectionStrings em appsettings).");

@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SteamTracker.Core\SteamTracker.Core.csproj" />
     <ProjectReference Include="..\SteamTracker.Infrastructure\SteamTracker.Infrastructure.csproj" />
+    <ProjectReference Include="..\SteamTracker.Worker\SteamTracker.Worker.csproj" />
   </ItemGroup>
 
 </Project>
