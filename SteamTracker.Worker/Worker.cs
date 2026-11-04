@@ -1,23 +1,42 @@
+using Microsoft.Extensions.Options;
+
 namespace SteamTracker.Worker;
 
-public class Worker : BackgroundService
+/// <summary>Executa a coleta de preços periodicamente, sem morrer por falhas de um ciclo.</summary>
+public class Worker(
+    IServiceScopeFactory scopeFactory,
+    IOptions<PriceCollectionOptions> options,
+    ILogger<Worker> logger) : BackgroundService
 {
-    private readonly ILogger<Worker> _logger;
-
-    public Worker(ILogger<Worker> logger)
-    {
-        _logger = logger;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            if (_logger.IsEnabled(LogLevel.Information))
+            await RunCycleAsync(stoppingToken);
+
+            using var timer = new PeriodicTimer(options.Value.Interval);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+                await RunCycleAsync(stoppingToken);
             }
-            await Task.Delay(1000, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Desligamento normal: encerra em silêncio.
+        }
+    }
+
+    private async Task RunCycleAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var collector = scope.ServiceProvider.GetRequiredService<PriceCollector>();
+            await collector.CollectAsync(stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Ciclo de coleta falhou; tentando novamente no próximo intervalo");
         }
     }
 }
