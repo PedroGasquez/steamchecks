@@ -60,6 +60,26 @@ public class SteamMarketClientResponseTests
             () => CriarClient(handler).GetPriceAsync(730, "Qualquer Item", 7));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("<html/>")]
+    public async Task GetPriceAsync_200ComCorpoVazioOuNaoJson_LancaSteamMarketUnavailable(string corpo)
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, corpo);
+
+        await Assert.ThrowsAsync<SteamMarketUnavailableException>(
+            () => CriarClient(handler).GetPriceAsync(730, "Qualquer Item", 7));
+    }
+
+    [Fact]
+    public async Task GetPriceAsync_503ComJsonSemSuccess_LancaSteamMarketUnavailable()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.ServiceUnavailable, """{"error":"x"}""");
+
+        await Assert.ThrowsAsync<SteamMarketUnavailableException>(
+            () => CriarClient(handler).GetPriceAsync(730, "Qualquer Item", 7));
+    }
+
     [Fact]
     public async Task GetPriceAsync_404_RetornaNull()
     {

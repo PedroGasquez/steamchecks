@@ -221,7 +221,9 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   - Moeda global em `SteamMarket:Currency` (padrão 7 = BRL) na Api e no Worker.
   - Validação no POST: 400 (dados inválidos), 409 (já rastreado), 422 (Steam
     não conhece o item), 503 (Steam indisponível). O GET de preço sob demanda
-    também passou a devolver 503 nesses casos (antes vazaria 500).
+    também passou a devolver 503 nesses casos (antes devolvia 404 para 429/5xx,
+    porque o cliente retornava null, e 500 não tratado para circuito aberto,
+    timeout e erro de rede).
   - Cadência do Worker: ciclo a cada 15 min, 3 s entre itens (respeita o
     throttling da Steam).
   - `PriceCollector` fica no Worker; interfaces dos repositórios ficam no Core.
@@ -233,14 +235,25 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
 - Testes: 71 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
   e sem rede). Compila limpo.
 - **Pendências**: (1) a migration continua **nunca aplicada em Postgres real**;
-  (2) o status HTTP da Steam para item inexistente não foi confirmado — se for
-  500, o cliente lança exceção e o retry da Polly é desperdiçado.
+  (2) o status HTTP da Steam para item inexistente não foi confirmado. Se a
+  Steam devolver 500 + `{"success":false}` para nomes desconhecidos, o retry e o
+  circuit breaker (`IsTransientFailure` em
+  `SteamTracker.Infrastructure/DependencyInjection.cs`; MinimumThroughput=4,
+  FailureRatio=0.5, BreakDuration=30s) contam isso como falha: um único POST com
+  nome errado faz 4 tentativas e abre o circuito por 30 s (o próximo POST correto
+  só recebe 503 após ~14 s de backoff, pois o retry também trata
+  `BrokenCircuitException` como transitória), e um item rastreado que passe a
+  devolver 500+`success:false` pode abortar todos os ciclos do Worker para os
+  itens seguintes. Correção planejada no Dia 9: confirmar contra a API real; se
+  for 500, excluir corpos `success:false` do `ShouldHandle`.
 
 ---
 
 ## ⏭️ PRÓXIMO: Semana 1, Dia 9
 
-Candidatos: (1) validar a migration contra um Postgres real (Docker ou
+Candidatos: (0) confirmar o status da Steam para item inexistente e, se for 500,
+excluir corpos `success:false` do `ShouldHandle` da Polly (ver Pendências do
+Dia 8); (1) validar a migration contra um Postgres real (Docker ou
 instalação local) e rodar `dotnet ef database update`, confirmando também o
 status da Steam para item inexistente; (2) alertas (`Alert`) avaliados pelo
 Worker a cada coleta; (3) `GET /api/items` para listar os itens rastreados. O
