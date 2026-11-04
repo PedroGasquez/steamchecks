@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SteamTracker.Core.Entities;
-using SteamTracker.Core.ValueObjects;
 
 namespace SteamTracker.Infrastructure.Persistence.Configurations;
 
@@ -20,9 +18,7 @@ public class AlertConfiguration : IEntityTypeConfiguration<Alert>
         // A comparação de TargetPrice acontece em C# (Worker avalia o alerta),
         // não em SQL, então perder o filtro nativo por Amount não pesa aqui.
         builder.Property(a => a.TargetPrice)
-            .HasConversion(
-                money => money == null ? null : JsonSerializer.Serialize(money.Value, (JsonSerializerOptions?)null),
-                json => json == null ? null : JsonSerializer.Deserialize<Money>(json, (JsonSerializerOptions?)null))
+            .HasConversion(m => MoneyJsonConversion.Serialize(m), j => MoneyJsonConversion.Deserialize(j))
             .HasColumnName("TargetPrice")
             .HasColumnType("jsonb");
 
