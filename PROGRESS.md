@@ -207,24 +207,51 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   contra um banco real**. Primeira tarefa da próxima sessão com Postgres
   disponível: validar isso de ponta a ponta.
 - Compila limpo (solução inteira, 5 projetos), suite de testes do Dia 6
-  continua passando (28/28). Ainda não commitado.
+  continua passando (28/28). Commitado.
+
+### ✅ Semana 1, Dia 8 — Coleta de preços
+- **O que entrou**: `POST /api/items` (valida o item na Steam e grava o primeiro
+  `PriceSnapshot`), `GET /api/items/{id}/snapshots?limit=` (do mais recente ao
+  mais antigo, `limit` ajustado a [1, 500]) e o GET de preço sob demanda movido
+  para `Endpoints/ItemEndpoints.cs`. `PriceCollector` + `Worker` coletando
+  preços periodicamente e sobrevivendo a falhas de ciclo. Repositórios EF
+  (`TrackedItem`, `PriceSnapshot`) com interfaces no Core. Respostas sempre via
+  DTO (`record`), nunca entidades.
+- **Decisões**:
+  - Moeda global em `SteamMarket:Currency` (padrão 7 = BRL) na Api e no Worker.
+  - Validação no POST: 400 (dados inválidos), 409 (já rastreado), 422 (Steam
+    não conhece o item), 503 (Steam indisponível). O GET de preço sob demanda
+    também passou a devolver 503 nesses casos (antes vazaria 500).
+  - Cadência do Worker: ciclo a cada 15 min, 3 s entre itens (respeita o
+    throttling da Steam).
+  - `PriceCollector` fica no Worker; interfaces dos repositórios ficam no Core.
+- **Bug encontrado e corrigido**: leitura de `Money?` em `jsonb` falhava (o
+  `Money` é struct com construtor validado). Corrigido com `MoneyJsonConversion`;
+  o formato gravado não mudou, então **sem migration nova**.
+- `SteamMarketClient` agora lança `SteamMarketUnavailableException` em 429/5xx
+  (antes tratava como "sem dado"), separando item inexistente de Steam fora do ar.
+- Testes: 71 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
+  e sem rede). Compila limpo.
+- **Pendências**: (1) a migration continua **nunca aplicada em Postgres real**;
+  (2) o status HTTP da Steam para item inexistente não foi confirmado — se for
+  500, o cliente lança exceção e o retry da Polly é desperdiçado.
 
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 8
+## ⏭️ PRÓXIMO: Semana 1, Dia 9
 
 Candidatos: (1) validar a migration contra um Postgres real (Docker ou
-instalação local) e rodar `dotnet ef database update`; (2) consumir a
-persistência de verdade — endpoint `POST /api/items` pra criar
-`TrackedItem`, e o Worker gravando `PriceSnapshot` a cada consulta ao invés
-de só retornar o preço on-demand. O arquivo `backlog-steam-tracker-v2.md`
-referenciado no topo deste documento continua sem existir no repo — vale
-confirmar se existe em outro lugar ou recriar o roadmap.
+instalação local) e rodar `dotnet ef database update`, confirmando também o
+status da Steam para item inexistente; (2) alertas (`Alert`) avaliados pelo
+Worker a cada coleta; (3) `GET /api/items` para listar os itens rastreados. O
+arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento
+continua sem existir no repo — vale confirmar se existe em outro lugar ou
+recriar o roadmap.
 
 ---
 
 ## Como retomar
 
 Em qualquer ferramenta nova, diga:
-> "Estamos no Dia 7 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
+> "Estamos no Dia 8 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
 > no repo e continue daí."

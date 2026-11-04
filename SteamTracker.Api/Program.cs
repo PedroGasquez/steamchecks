@@ -1,4 +1,4 @@
-using SteamTracker.Core.Abstractions;
+using SteamTracker.Api.Endpoints;
 using SteamTracker.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,12 +18,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/api/items/{appId:int}/{marketHashName}/price",
-    async (int appId, string marketHashName, int currency, ISteamMarketClient client, CancellationToken cancellationToken) =>
-    {
-        var result = await client.GetPriceAsync(appId, marketHashName, currency, cancellationToken);
-        return result is not null ? Results.Ok(result) : Results.NotFound();
-    })
-    .WithName("GetItemPrice");
+app.MapItemEndpoints();
 
 app.Run();
+
+// Necessário para o WebApplicationFactory nos testes.
+public partial class Program;
