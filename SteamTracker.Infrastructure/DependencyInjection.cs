@@ -7,6 +7,7 @@ using Polly.CircuitBreaker;
 using Polly.Retry;
 using SteamTracker.Core.Abstractions;
 using SteamTracker.Infrastructure.Persistence;
+using SteamTracker.Infrastructure.Persistence.Repositories;
 using SteamTracker.Infrastructure.Steam;
 
 namespace SteamTracker.Infrastructure;
@@ -23,11 +24,15 @@ public static class DependencyInjection
             })
             .AddResilienceHandler("steam-market", ConfigureSteamResilience);
 
+        services.Configure<SteamMarketOptions>(configuration.GetSection("SteamMarket"));
+
         var connectionString = configuration.GetConnectionString("SteamTracker")
             ?? throw new InvalidOperationException(
                 "Connection string 'SteamTracker' não configurada (ver ConnectionStrings em appsettings).");
 
         services.AddDbContext<SteamTrackerDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddScoped<ITrackedItemRepository, TrackedItemRepository>();
+        services.AddScoped<IPriceSnapshotRepository, PriceSnapshotRepository>();
 
         return services;
     }

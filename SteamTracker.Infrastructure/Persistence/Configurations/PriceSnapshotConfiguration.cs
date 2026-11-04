@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SteamTracker.Core.Entities;
-using SteamTracker.Core.ValueObjects;
 
 namespace SteamTracker.Infrastructure.Persistence.Configurations;
 
@@ -26,9 +24,7 @@ public class PriceSnapshotConfiguration : IEntityTypeConfiguration<PriceSnapshot
         // como jsonb em vez de duas colunas — perde filtro por Amount via SQL
         // direto, aceitável aqui porque MedianPrice é só exibido, não filtrado.
         builder.Property(s => s.MedianPrice)
-            .HasConversion(
-                money => money == null ? null : JsonSerializer.Serialize(money.Value, (JsonSerializerOptions?)null),
-                json => json == null ? null : JsonSerializer.Deserialize<Money>(json, (JsonSerializerOptions?)null))
+            .HasConversion(m => MoneyJsonConversion.Serialize(m), j => MoneyJsonConversion.Deserialize(j))
             .HasColumnName("MedianPrice")
             .HasColumnType("jsonb");
 

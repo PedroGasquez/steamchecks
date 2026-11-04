@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,25 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
 
         if (!response.IsSuccessStatusCode)
         {
+            // Alguns erros da Steam trazem {"success":false} (item inexistente).
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            SteamPriceOverviewResponse? errorData = null;
+            try
+            {
+                errorData = JsonSerializer.Deserialize<SteamPriceOverviewResponse>(body);
+            }
+            catch (JsonException)
+            {
+                // Corpo não-JSON (ex.: página HTML de erro): tratamos pelo status.
+            }
+
+            if (errorData is { Success: false })
+                return null;
+
+            // 429 e 5xx indicam Steam indisponível, não item inexistente.
+            if (response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500)
+                throw new SteamMarketUnavailableException(response.StatusCode);
+
             _logger.LogWarning(
                 "Steam retornou {StatusCode} para {AppId}/{Item}",
                 (int)response.StatusCode, appId, marketHashName);
