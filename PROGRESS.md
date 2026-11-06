@@ -221,7 +221,9 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   - Moeda global em `SteamMarket:Currency` (padrão 7 = BRL) na Api e no Worker.
   - Validação no POST: 400 (dados inválidos), 409 (já rastreado), 422 (Steam
     não conhece o item), 503 (Steam indisponível). O GET de preço sob demanda
-    também passou a devolver 503 nesses casos (antes vazaria 500).
+    também passou a devolver 503 nesses casos (antes devolvia 404 para 429/5xx,
+    porque o cliente retornava null, e 500 não tratado para circuito aberto,
+    timeout e erro de rede).
   - Cadência do Worker: ciclo a cada 15 min, 3 s entre itens (respeita o
     throttling da Steam).
   - `PriceCollector` fica no Worker; interfaces dos repositórios ficam no Core.
@@ -230,20 +232,41 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   o formato gravado não mudou, então **sem migration nova**.
 - `SteamMarketClient` agora lança `SteamMarketUnavailableException` em 429/5xx
   (antes tratava como "sem dado"), separando item inexistente de Steam fora do ar.
-- Testes: 71 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
+- **Ajustes da revisão final** (commit separado, entrou depois do merge do PR #2):
+  corpo vazio/não-JSON numa resposta 2xx da Steam vira
+  `SteamMarketUnavailableException` (antes estourava `JsonException`: 500 no POST
+  e ciclo do Worker abortado); `Success` virou `bool?`, então um corpo de erro sem
+  `success` em 429/5xx não é mais lido como "item inexistente"; o POST devolve 400
+  para `displayName`/`marketHashName` acima de 255 caracteres e para `type`
+  inexistente, e `displayName` vazio cai para o `marketHashName`; um erro real
+  durante o shutdown do Worker não derruba mais o `ExecuteTask`.
+- Testes: 79 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
   e sem rede). Compila limpo.
 - **Pendências**: (1) a migration continua **nunca aplicada em Postgres real**;
-  (2) o status HTTP da Steam para item inexistente não foi confirmado — se for
-  500, o cliente lança exceção e o retry da Polly é desperdiçado.
+  (2) o status HTTP da Steam para item inexistente não foi confirmado. Se a
+  Steam devolver 500 + `{"success":false}` para nomes desconhecidos, o retry e o
+  circuit breaker (`IsTransientFailure` em
+  `SteamTracker.Infrastructure/DependencyInjection.cs`; MinimumThroughput=4,
+  FailureRatio=0.5, BreakDuration=30s) contam isso como falha: um único POST com
+  nome errado faz 4 tentativas e abre o circuito por 30 s (o próximo POST correto
+  só recebe 503 após ~14 s de backoff, pois o retry também trata
+  `BrokenCircuitException` como transitória), e um item rastreado que passe a
+  devolver 500+`success:false` pode abortar todos os ciclos do Worker para os
+  itens seguintes. Correção planejada no Dia 9: confirmar contra a API real; se
+  for 500, excluir corpos `success:false` do `ShouldHandle`.
 
 ---
 
 ## ⏭️ PRÓXIMO: Semana 1, Dia 9
 
-Candidatos: (1) validar a migration contra um Postgres real (Docker ou
-instalação local) e rodar `dotnet ef database update`, confirmando também o
-status da Steam para item inexistente; (2) alertas (`Alert`) avaliados pelo
-Worker a cada coleta; (3) `GET /api/items` para listar os itens rastreados. O
+Candidatos: (1) confirmar o status da Steam para item inexistente e, se for 500,
+excluir corpos `success:false` do `ShouldHandle` da Polly (ver Pendências do
+Dia 8); (2) validar a migration contra um Postgres real (Docker ou
+instalação local) e rodar `dotnet ef database update`; (3) alertas (`Alert`)
+avaliados pelo Worker a cada coleta; (4) `GET /api/items` para listar os itens
+rastreados. Dívidas menores da revisão: teste que monte o host real do Worker
+(pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
+dos snapshots com mesmo `CapturedAt`. O
 arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento
 continua sem existir no repo — vale confirmar se existe em outro lugar ou
 recriar o roadmap.
