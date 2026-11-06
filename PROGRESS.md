@@ -232,7 +232,15 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   o formato gravado não mudou, então **sem migration nova**.
 - `SteamMarketClient` agora lança `SteamMarketUnavailableException` em 429/5xx
   (antes tratava como "sem dado"), separando item inexistente de Steam fora do ar.
-- Testes: 71 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
+- **Ajustes da revisão final** (commit separado, entrou depois do merge do PR #2):
+  corpo vazio/não-JSON numa resposta 2xx da Steam vira
+  `SteamMarketUnavailableException` (antes estourava `JsonException`: 500 no POST
+  e ciclo do Worker abortado); `Success` virou `bool?`, então um corpo de erro sem
+  `success` em 429/5xx não é mais lido como "item inexistente"; o POST devolve 400
+  para `displayName`/`marketHashName` acima de 255 caracteres e para `type`
+  inexistente, e `displayName` vazio cai para o `marketHashName`; um erro real
+  durante o shutdown do Worker não derruba mais o `ExecuteTask`.
+- Testes: 79 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
   e sem rede). Compila limpo.
 - **Pendências**: (1) a migration continua **nunca aplicada em Postgres real**;
   (2) o status HTTP da Steam para item inexistente não foi confirmado. Se a
@@ -251,12 +259,14 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
 
 ## ⏭️ PRÓXIMO: Semana 1, Dia 9
 
-Candidatos: (0) confirmar o status da Steam para item inexistente e, se for 500,
+Candidatos: (1) confirmar o status da Steam para item inexistente e, se for 500,
 excluir corpos `success:false` do `ShouldHandle` da Polly (ver Pendências do
-Dia 8); (1) validar a migration contra um Postgres real (Docker ou
-instalação local) e rodar `dotnet ef database update`, confirmando também o
-status da Steam para item inexistente; (2) alertas (`Alert`) avaliados pelo
-Worker a cada coleta; (3) `GET /api/items` para listar os itens rastreados. O
+Dia 8); (2) validar a migration contra um Postgres real (Docker ou
+instalação local) e rodar `dotnet ef database update`; (3) alertas (`Alert`)
+avaliados pelo Worker a cada coleta; (4) `GET /api/items` para listar os itens
+rastreados. Dívidas menores da revisão: teste que monte o host real do Worker
+(pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
+dos snapshots com mesmo `CapturedAt`. O
 arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento
 continua sem existir no repo — vale confirmar se existe em outro lugar ou
 recriar o roadmap.
