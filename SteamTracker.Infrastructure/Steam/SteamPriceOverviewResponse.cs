@@ -9,7 +9,7 @@ namespace SteamTracker.Infrastructure.Steam;
 internal sealed class SteamPriceOverviewResponse
 {
     [JsonPropertyName("success")]
-    public bool Success { get; set; }
+    public bool? Success { get; set; }
 
     [JsonPropertyName("lowest_price")]
     public string? LowestPrice { get; set; }

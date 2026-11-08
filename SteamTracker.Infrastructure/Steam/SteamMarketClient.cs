@@ -59,11 +59,20 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
         }
 
         var json = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var data = await JsonSerializer.DeserializeAsync<SteamPriceOverviewResponse>(
-            json, cancellationToken: cancellationToken);
+        SteamPriceOverviewResponse? data;
+        try
+        {
+            data = await JsonSerializer.DeserializeAsync<SteamPriceOverviewResponse>(
+                json, cancellationToken: cancellationToken);
+        }
+        catch (JsonException)
+        {
+            // 2xx com corpo vazio ou não-JSON: a Steam respondeu algo inutilizável.
+            throw new SteamMarketUnavailableException(response.StatusCode);
+        }
 
-        // success=false significa item inexistente ou sem dados de mercado.
-        if (data is null || !data.Success)
+        // Sem success=true significa item inexistente ou sem dados de mercado.
+        if (data is null || data.Success != true)
             return null;
 
         var currencyCode = CurrencyCodeFromSteam(currency);

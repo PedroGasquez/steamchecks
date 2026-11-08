@@ -150,6 +150,51 @@ public sealed class ItemEndpointsTests : IDisposable
         Assert.Equal(0, snapshots.GetArrayLength());
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Post_DisplayNameVazio_UsaMarketHashName(string displayName)
+    {
+        _factory.Steam.Responses["Prisma Case"] = PrecoValido;
+
+        var resposta = await _client.PostAsJsonAsync("/api/items",
+            new { appId = 730, marketHashName = "Prisma Case", displayName });
+
+        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
+        Assert.Equal("Prisma Case", (await Json(resposta)).GetProperty("displayName").GetString());
+    }
+
+    [Theory]
+    [InlineData("marketHashName")]
+    [InlineData("displayName")]
+    public async Task Post_TextoMaiorQue255_Retorna400(string campo)
+    {
+        var longo = new string('a', 256);
+        var corpo = new Dictionary<string, object?>
+        {
+            ["appId"] = 730,
+            ["marketHashName"] = campo == "marketHashName" ? longo : "Prisma Case",
+            ["displayName"] = campo == "displayName" ? longo : "Prisma Case"
+        };
+
+        var resposta = await _client.PostAsJsonAsync("/api/items", corpo);
+
+        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        Assert.True((await Json(resposta)).GetProperty("errors").TryGetProperty(campo, out _));
+        Assert.Empty(_factory.Steam.Calls);
+    }
+
+    [Fact]
+    public async Task Post_TypeInexistente_Retorna400()
+    {
+        var resposta = await _client.PostAsJsonAsync("/api/items",
+            new { appId = 730, marketHashName = "Prisma Case", type = 42 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+        Assert.True((await Json(resposta)).GetProperty("errors").TryGetProperty("type", out _));
+        Assert.Empty(_factory.Steam.Calls);
+    }
+
     [Fact]
     public async Task Post_NomeComCaracteresEspeciais_GravaExatamente()
     {

@@ -34,7 +34,7 @@ public class Worker(
             var collector = scope.ServiceProvider.GetRequiredService<PriceCollector>();
             await collector.CollectAsync(stoppingToken);
         }
-        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {
             logger.LogError(ex, "Ciclo de coleta falhou; tentando novamente no próximo intervalo");
         }

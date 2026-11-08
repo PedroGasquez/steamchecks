@@ -49,6 +49,12 @@ public static class ItemEndpoints
             erros["appId"] = ["appId deve ser maior que zero."];
         if (string.IsNullOrWhiteSpace(request.MarketHashName))
             erros["marketHashName"] = ["marketHashName é obrigatório."];
+        else if (request.MarketHashName.Length > 255)
+            erros["marketHashName"] = ["marketHashName deve ter no máximo 255 caracteres."];
+        if (request.DisplayName is { Length: > 255 })
+            erros["displayName"] = ["displayName deve ter no máximo 255 caracteres."];
+        if (request.Type is { } tipo && !Enum.IsDefined(tipo))
+            erros["type"] = ["type não é um valor válido de ItemType."];
         if (erros.Count > 0)
             return Results.ValidationProblem(erros);
 
@@ -75,7 +81,7 @@ public static class ItemEndpoints
         var item = new TrackedItem(
             request.AppId,
             marketHashName,
-            request.DisplayName ?? marketHashName,
+            string.IsNullOrWhiteSpace(request.DisplayName) ? marketHashName : request.DisplayName,
             request.Type ?? ItemType.Unknown);
         await items.AddAsync(item, ct);
 
