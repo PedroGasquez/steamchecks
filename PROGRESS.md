@@ -252,19 +252,43 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   só recebe 503 após ~14 s de backoff, pois o retry também trata
   `BrokenCircuitException` como transitória), e um item rastreado que passe a
   devolver 500+`success:false` pode abortar todos os ciclos do Worker para os
-  itens seguintes. Correção planejada no Dia 9: confirmar contra a API real; se
-  for 500, excluir corpos `success:false` do `ShouldHandle`.
+  itens seguintes. **Resolvido no Dia 9** (de forma defensiva, ver abaixo).
+
+### ✅ Semana 1, Dia 9 — `success:false` não é falha transitória
+- **Problema** (pendência 2 do Dia 8): se a Steam responder 500 +
+  `{"success":false}` para item inexistente, o retry e o circuit breaker
+  tratavam isso como falha — um nome digitado errado abria o circuito por 30 s
+  e um item fora do mercado podia abortar os ciclos do Worker.
+- **Tentativa de confirmar contra a API real (09/11)**: a Steam **não
+  respondeu desta máquina** (timeout no `curl` e no PowerShell, dentro e fora
+  do sandbox), enquanto o GitHub respondia normalmente. Pode ser instabilidade
+  da Steam ou bloqueio do IP (o risco de shadow-ban já anotado). Não deu pra
+  saber se o status de item inexistente é 200 ou 500.
+- **Correção defensiva, que vale nos dois cenários**: o predicado da Polly
+  (`IsTransientFailure` → `IsTransientFailureAsync` em `DependencyInjection.cs`)
+  passa a ler o corpo de respostas 429/5xx; se for `{"success":false}`, a
+  resposta é definitiva (item inexistente): sem retry e sem contar falha no
+  circuit breaker. Qualquer outro 429/5xx continua transitório. Se a Steam
+  devolver 200 nesse caso, nada muda. A checagem "corpo é `success:false`"
+  virou `SteamPriceOverviewResponse.IsSuccessFalse`, usada também pelo client.
+- Detalhe: o predicado roda antes do client ler a resposta.
+  `ReadAsStringAsync` bufferiza o conteúdo, então o client ainda consegue ler
+  o corpo — um teste com stream sem seek trava isso.
+- Testes: 87 passando (+8: 429/500 com `success:false` não são transitórios;
+  500 com HTML/JSON sem `success`/vazio continua transitório; corpo ainda
+  legível depois do predicado; uma única tentativa no retry; 4 respostas
+  `success:false` não abrem o circuito). Compila limpo.
 
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 9
+## ⏭️ PRÓXIMO: Semana 1, Dia 10
 
-Candidatos: (1) confirmar o status da Steam para item inexistente e, se for 500,
-excluir corpos `success:false` do `ShouldHandle` da Polly (ver Pendências do
-Dia 8); (2) validar a migration contra um Postgres real (Docker ou
-instalação local) e rodar `dotnet ef database update`; (3) alertas (`Alert`)
-avaliados pelo Worker a cada coleta; (4) `GET /api/items` para listar os itens
-rastreados. Dívidas menores da revisão: teste que monte o host real do Worker
+Candidatos: (1) validar a migration contra um Postgres real (Docker ou
+instalação local) e rodar `dotnet ef database update`; (2) alertas (`Alert`)
+avaliados pelo Worker a cada coleta; (3) `GET /api/items` para listar os itens
+rastreados; (4) quando a Steam voltar a responder desta máquina, confirmar o
+status de item inexistente (só informativo agora) e testar ponta a ponta o
+`POST /api/items` real. Dívidas menores da revisão: teste que monte o host real do Worker
 (pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
 dos snapshots com mesmo `CapturedAt`. O
 arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento
@@ -276,5 +300,5 @@ recriar o roadmap.
 ## Como retomar
 
 Em qualquer ferramenta nova, diga:
-> "Estamos no Dia 8 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
+> "Estamos no Dia 9 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
 > no repo e continue daí."
