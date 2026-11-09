@@ -52,7 +52,7 @@ public static class DependencyInjection
     // contra um bloqueio real.
     internal static RetryStrategyOptions<HttpResponseMessage> CreateRetryOptions() => new()
     {
-        ShouldHandle = args => ValueTask.FromResult(IsTransientFailure(args.Outcome)),
+        ShouldHandle = args => IsTransientFailureAsync(args.Outcome, args.Context.CancellationToken),
         MaxRetryAttempts = 3,
         BackoffType = DelayBackoffType.Exponential,
         UseJitter = true,
@@ -61,7 +61,7 @@ public static class DependencyInjection
 
     internal static CircuitBreakerStrategyOptions<HttpResponseMessage> CreateCircuitBreakerOptions() => new()
     {
-        ShouldHandle = args => ValueTask.FromResult(IsTransientFailure(args.Outcome)),
+        ShouldHandle = args => IsTransientFailureAsync(args.Outcome, args.Context.CancellationToken),
         // Volume de chamadas é baixo (tracker pessoal, não scraper em
         // massa) — limiar baixo pra o breaker disparar de verdade.
         FailureRatio = 0.5,
@@ -70,12 +70,25 @@ public static class DependencyInjection
         BreakDuration = TimeSpan.FromSeconds(30)
     };
 
-    internal static bool IsTransientFailure(Outcome<HttpResponseMessage> outcome)
+    // 429/5xx são transitórios, exceto quando o corpo é {"success":false}: aí a
+    // Steam já deu a resposta definitiva ("item inexistente"). Sem essa exceção,
+    // um nome digitado errado gastaria 4 tentativas e, pelo circuit breaker,
+    // bloquearia por 30 s as consultas a todos os outros itens.
+    internal static async ValueTask<bool> IsTransientFailureAsync(
+        Outcome<HttpResponseMessage> outcome,
+        CancellationToken cancellationToken = default)
     {
         if (outcome.Exception is not null)
             return true;
 
-        return outcome.Result?.StatusCode is HttpStatusCode.TooManyRequests
-            or >= HttpStatusCode.InternalServerError;
+        var response = outcome.Result;
+        if (response?.StatusCode is not (HttpStatusCode.TooManyRequests or >= HttpStatusCode.InternalServerError))
+            return false;
+
+        // O predicado roda antes do SteamMarketClient ler a resposta.
+        // ReadAsStringAsync bufferiza o conteúdo, então o client ainda consegue
+        // ler o corpo depois (não trocar por ReadAsStreamAsync, que o consumiria).
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return !SteamPriceOverviewResponse.IsSuccessFalse(body);
     }
 }

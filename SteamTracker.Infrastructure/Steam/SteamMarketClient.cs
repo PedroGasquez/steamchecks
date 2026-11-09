@@ -34,18 +34,9 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
         if (!response.IsSuccessStatusCode)
         {
             // Alguns erros da Steam trazem {"success":false} (item inexistente).
+            // Corpo não-JSON (ex.: página HTML de erro) cai no tratamento por status.
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            SteamPriceOverviewResponse? errorData = null;
-            try
-            {
-                errorData = JsonSerializer.Deserialize<SteamPriceOverviewResponse>(body);
-            }
-            catch (JsonException)
-            {
-                // Corpo não-JSON (ex.: página HTML de erro): tratamos pelo status.
-            }
-
-            if (errorData is { Success: false })
+            if (SteamPriceOverviewResponse.IsSuccessFalse(body))
                 return null;
 
             // 429 e 5xx indicam Steam indisponível, não item inexistente.
