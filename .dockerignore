@@ -1,0 +1,9 @@
+**/bin
+**/obj
+.git
+.superpowers
+docs
+**/*.md
+.env
+deploy
+SteamTracker.Tests
