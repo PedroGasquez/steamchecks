@@ -67,11 +67,17 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
             return null;
 
         var currencyCode = CurrencyCodeFromSteam(currency);
-
-        return new MarketPriceResult(
+        var result = new MarketPriceResult(
             LowestPrice: ParsePrice(data.LowestPrice, currencyCode),
             MedianPrice: ParsePrice(data.MedianPrice, currencyCode),
             Volume: ParseVolume(data.Volume));
+
+        // Item inexistente também volta 200 {"success":true}, só que sem nenhum
+        // campo de mercado (confirmado contra a Steam real em 2026-11-12).
+        if (result is { LowestPrice: null, MedianPrice: null, Volume: null })
+            return null;
+
+        return result;
     }
 
     /// <summary>

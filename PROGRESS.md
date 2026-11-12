@@ -328,8 +328,14 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
 - **Bug encontrado:** para item inexistente a Steam responde `200
   {"success":true}` **sem preços** (não `success:false`, como se supunha desde
   o Dia 8). O `SteamMarketClient` devolve um resultado com tudo `null` e o
-  `POST /api/items` aceita o cadastro (201, sem snapshot). Ficou cadastrado o
-  item de teste `Item Que Nao Existe XYZ` no banco do PC.
+  `POST /api/items` aceita o cadastro (201, sem snapshot).
+- **Bug corrigido na origem** (`SteamMarketClient`): `success:true` sem nenhum
+  dado de mercado (menor preço, mediana e volume todos ausentes) agora devolve
+  `null`, que é o contrato já documentado ("item inexistente ou sem dados de
+  mercado"). Efeito: cadastro → 422, `GET .../price` → 404, Worker → "pulado".
+  Resposta parcial (só mediana/volume, item real sem oferta no momento) continua
+  sendo aceita. +3 testes (90/90). Conferido contra a Steam real no mini
+  servidor; item de teste removido do banco do PC.
 - Pendente da OCI: criar a VM (Tasks 4–5 do plano: bootstrap, deploy,
   verificação na nuvem).
 
@@ -337,9 +343,7 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
 
 ## ⏭️ PRÓXIMO: Semana 1, Dia 12
 
-Candidatos: (0) corrigir o bug acima: tratar `success:true` sem nenhum preço
-como item inexistente/sem mercado no cadastro (decidir se um item real sem
-ofertas também cai aí) e remover o item de teste; (1) alertas (`Alert`)
+Candidatos: (1) alertas (`Alert`)
 avaliados pelo Worker a cada coleta; (2) `GET /api/items` para listar os itens
 rastreados; (3) deploy na VM da OCI quando o dono decidir. Dívidas menores da revisão: teste que monte o host real do Worker
 (pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
