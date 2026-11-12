@@ -1,0 +1,27 @@
+# Postgres local para desenvolvimento. Credenciais iguais às do
+# appsettings.Development.json da Api e do Worker — senha fraca de propósito,
+# nunca usar em produção.
+#
+#   docker compose up -d
+#   dotnet tool restore
+#   dotnet ef database update --project SteamTracker.Infrastructure --startup-project SteamTracker.Api
+services:
+  postgres:
+    image: postgres:17
+    container_name: steamtracker-postgres
+    environment:
+      POSTGRES_DB: steamtracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - steamtracker-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d steamtracker"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  steamtracker-pgdata:
