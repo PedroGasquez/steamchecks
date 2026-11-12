@@ -7,6 +7,29 @@ e é acessada por túnel SSH.
 
 Nos comandos abaixo, `<ip>` é o IP público da VM (não commite o IP).
 
+## 0. Mini servidor no próprio PC (antes da VM)
+
+O mesmo `docker-compose.prod.yml` roda no Docker Desktop. A Api fica em
+`http://127.0.0.1:8080` direto, sem túnel. No Git Bash, a partir da raiz do repo:
+
+```bash
+mkdir -p ~/steamtracker
+[ -f ~/steamtracker/.env ] || (umask 077; printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" > ~/steamtracker/.env)
+export STEAMTRACKER_ENV_FILE="$HOME/steamtracker/.env"
+alias dc='docker compose -f docker-compose.prod.yml --env-file ~/steamtracker/.env'
+dc up -d --build      # também serve para atualizar depois de um git pull
+dc ps -a              # migrate deve ter Exited (0)
+```
+
+- O banco fica no volume `steamtracker_steamtracker-pgdata`, separado do Postgres
+  de desenvolvimento (`docker-compose.yml`, porta 5432); os dois convivem.
+- Os containers voltam sozinhos quando o Docker Desktop inicia
+  (`restart: unless-stopped`). Para o coletor voltar após reiniciar o Windows,
+  ative "Start Docker Desktop when you sign in" nas configurações do Docker Desktop.
+- Parar sem perder dados: `dc stop`. **Nunca** `dc down -v` (apaga o histórico).
+- Ao migrar para a VM, o histórico do PC não vai junto automaticamente
+  (exportar com `pg_dump` se quiser levar).
+
 ## 1. Chave SSH (no PC)
 
 ```bash
