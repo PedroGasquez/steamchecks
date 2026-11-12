@@ -38,6 +38,46 @@ public class SteamMarketClientResponseTests
         Assert.Null(result);
     }
 
+    // Resposta real da Steam (2026-11-12) para item inexistente: 200 com
+    // success:true e nenhum campo de mercado — não {"success":false}.
+    [Theory]
+    [InlineData("""{"success":true}""")]
+    [InlineData("""{"success":true,"lowest_price":"","median_price":"","volume":""}""")]
+    public async Task GetPriceAsync_SuccessTrueSemDadosDeMercado_RetornaNull(string corpo)
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, corpo);
+
+        var result = await CriarClient(handler).GetPriceAsync(730, "Item Que Nao Existe XYZ", 7);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetPriceAsync_SuccessTrueComPrecoNaoParseavel_RetornaResultadoParcial()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK,
+            """{"success":true,"lowest_price":"abc"}""");
+
+        var result = await CriarClient(handler).GetPriceAsync(730, "Item Qualquer", 7);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.LowestPrice);
+    }
+
+    [Fact]
+    public async Task GetPriceAsync_SuccessTrueSoComMedianaEVolume_RetornaResultadoParcial()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK,
+            """{"success":true,"median_price":"R$ 12,00","volume":"3"}""");
+
+        var result = await CriarClient(handler).GetPriceAsync(730, "Item Sem Ofertas Agora", 7);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.LowestPrice);
+        Assert.Equal(new Money(12.00m, "BRL"), result.MedianPrice);
+        Assert.Equal(3, result.Volume);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.TooManyRequests)]
     [InlineData(HttpStatusCode.ServiceUnavailable)]

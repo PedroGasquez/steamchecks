@@ -310,15 +310,42 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   e falha com "Connection string 'SteamTracker' não configurada".
 - Sem mudança de código de produção neste dia; suíte segue 87/87.
 
+### ✅ Semana 1, Dia 11 — Empacotamento Docker e mini servidor no PC
+- **Deploy preparado para a OCI** (spec `docs/superpowers/specs/2026-11-11-deploy-oci-design.md`,
+  plano `docs/superpowers/plans/2026-11-11-deploy-oci.md`): `Dockerfile`
+  multi-stage (alvos `api`, `worker`, `migrator` com EF migrations bundle; RID
+  pelo `TARGETARCH`; usuário não-root), `docker-compose.prod.yml` (Postgres sem
+  porta, `migrate` de uso único antes de Api/Worker, Api só em `127.0.0.1:8080`,
+  logs rotacionados), `deploy/bootstrap.sh`, `deploy/deploy.sh` e runbook em
+  `deploy/README.md`. Validado no Docker local, inclusive migration falhando
+  (senha errada) barrando Api e Worker.
+- **Rodando no PC como mini servidor** (decisão do dono: VM depois). `.env`
+  com senha gerada em `~/steamtracker/.env`, fora do repo. `migrate` Exited (0),
+  Api/Worker/Postgres de pé.
+- **Steam voltou a responder desta máquina.** Ponta a ponta confirmado:
+  `POST /api/items` com `Prisma Case` → 201, e o snapshot gravado no Postgres
+  (`R$ 7,10` / mediana `R$ 7,06` / volume 6977).
+- **Bug encontrado:** para item inexistente a Steam responde `200
+  {"success":true}` **sem preços** (não `success:false`, como se supunha desde
+  o Dia 8). O `SteamMarketClient` devolve um resultado com tudo `null` e o
+  `POST /api/items` aceita o cadastro (201, sem snapshot).
+- **Bug corrigido na origem** (`SteamMarketClient`): `success:true` sem nenhum
+  dado de mercado (menor preço, mediana e volume todos ausentes) agora devolve
+  `null`, que é o contrato já documentado ("item inexistente ou sem dados de
+  mercado"). Efeito: cadastro → 422, `GET .../price` → 404, Worker → "pulado".
+  Resposta parcial (só mediana/volume, item real sem oferta no momento) continua
+  sendo aceita. +3 testes (90/90). Conferido contra a Steam real no mini
+  servidor; item de teste removido do banco do PC.
+- Pendente da OCI: criar a VM (Tasks 4–5 do plano: bootstrap, deploy,
+  verificação na nuvem).
+
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 11
+## ⏭️ PRÓXIMO: Semana 1, Dia 12
 
-Candidatos: (1) alertas (`Alert`) avaliados pelo Worker a cada coleta;
-(2) `GET /api/items` para listar os itens rastreados; (3) quando a Steam voltar
-a responder desta máquina, testar ponta a ponta o `POST /api/items` com item
-novo e o Worker gravando no Postgres (e confirmar, só por curiosidade, o status
-de item inexistente). Dívidas menores da revisão: teste que monte o host real do Worker
+Candidatos: (1) alertas (`Alert`)
+avaliados pelo Worker a cada coleta; (2) `GET /api/items` para listar os itens
+rastreados; (3) deploy na VM da OCI quando o dono decidir. Dívidas menores da revisão: o parser de preço só entende o formato BRL (vírgula decimal); teste que monte o host real do Worker
 (pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
 dos snapshots com mesmo `CapturedAt`. O
 arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento
@@ -330,5 +357,5 @@ recriar o roadmap.
 ## Como retomar
 
 Em qualquer ferramenta nova, diga:
-> "Estamos no Dia 10 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
+> "Estamos no Dia 11 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
 > no repo e continue daí."

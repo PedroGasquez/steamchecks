@@ -76,7 +76,7 @@ public static class ItemEndpoints
         if (preco is null)
             return Results.Problem(
                 statusCode: StatusCodes.Status422UnprocessableEntity,
-                title: "Item não encontrado no Steam Market");
+                title: "Item não encontrado ou sem dados de mercado no Steam Market");
 
         var item = new TrackedItem(
             request.AppId,

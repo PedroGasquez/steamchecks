@@ -66,12 +66,28 @@ public sealed partial class SteamMarketClient : ISteamMarketClient
         if (data is null || data.Success != true)
             return null;
 
-        var currencyCode = CurrencyCodeFromSteam(currency);
+        // Item inexistente também volta 200 {"success":true}, só que sem nenhum
+        // campo de mercado (confirmado contra a Steam real em 2026-11-12).
+        // Decide sobre as strings cruas: valor presente mas não parseável
+        // ainda é "tem dados" (resultado parcial + aviso).
+        if (string.IsNullOrWhiteSpace(data.LowestPrice)
+            && string.IsNullOrWhiteSpace(data.MedianPrice)
+            && string.IsNullOrWhiteSpace(data.Volume))
+            return null;
 
-        return new MarketPriceResult(
-            LowestPrice: ParsePrice(data.LowestPrice, currencyCode),
-            MedianPrice: ParsePrice(data.MedianPrice, currencyCode),
-            Volume: ParseVolume(data.Volume));
+        var currencyCode = CurrencyCodeFromSteam(currency);
+        var lowest = ParsePrice(data.LowestPrice, currencyCode);
+        var median = ParsePrice(data.MedianPrice, currencyCode);
+        var volume = ParseVolume(data.Volume);
+
+        if (lowest is null && !string.IsNullOrWhiteSpace(data.LowestPrice))
+            _logger.LogWarning("Steam: lowest_price não parseável: {Raw}", data.LowestPrice);
+        if (median is null && !string.IsNullOrWhiteSpace(data.MedianPrice))
+            _logger.LogWarning("Steam: median_price não parseável: {Raw}", data.MedianPrice);
+        if (volume is null && !string.IsNullOrWhiteSpace(data.Volume))
+            _logger.LogWarning("Steam: volume não parseável: {Raw}", data.Volume);
+
+        return new MarketPriceResult(lowest, median, volume);
     }
 
     /// <summary>
