@@ -1,0 +1,76 @@
+name: steamtracker
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-connection-string: &connection-string
+  ConnectionStrings__SteamTracker: Host=postgres;Port=5432;Database=steamtracker;Username=steamtracker;Password=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: steamtracker
+      POSTGRES_DB: steamtracker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+    volumes:
+      - steamtracker-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U steamtracker -d steamtracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      <<: *connection-string
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
+
+  api:
+    build:
+      context: .
+      target: api
+    # Só as chaves presentes no .env chegam ao container (opcionais sem valor
+    # vazio sobrescrevendo o appsettings.json).
+    env_file:
+      - ${STEAMTRACKER_ENV_FILE:?defina STEAMTRACKER_ENV_FILE}
+    environment:
+      <<: *connection-string
+      ASPNETCORE_ENVIRONMENT: Production
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    logging: *default-logging
+
+  worker:
+    build:
+      context: .
+      target: worker
+    env_file:
+      - ${STEAMTRACKER_ENV_FILE:?defina STEAMTRACKER_ENV_FILE}
+    environment:
+      <<: *connection-string
+      DOTNET_ENVIRONMENT: Production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  steamtracker-pgdata:
