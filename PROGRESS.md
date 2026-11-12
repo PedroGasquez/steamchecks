@@ -345,7 +345,7 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
 
 Candidatos: (1) alertas (`Alert`)
 avaliados pelo Worker a cada coleta; (2) `GET /api/items` para listar os itens
-rastreados; (3) deploy na VM da OCI quando o dono decidir. Dívidas menores da revisão: teste que monte o host real do Worker
+rastreados; (3) deploy na VM da OCI quando o dono decidir. Dívidas menores da revisão: o parser de preço só entende o formato BRL (vírgula decimal); teste que monte o host real do Worker
 (pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
 dos snapshots com mesmo `CapturedAt`. O
 arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento

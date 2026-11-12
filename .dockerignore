@@ -1,9 +1,12 @@
 **/bin
 **/obj
 .git
-.superpowers
+.claude
+.vs
+**/.superpowers
 docs
 **/*.md
-.env
+**/.env
+**/TestResults
 deploy
 SteamTracker.Tests

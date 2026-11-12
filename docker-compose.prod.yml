@@ -42,8 +42,8 @@ services:
     build:
       context: .
       target: api
-    # Só as chaves presentes no .env chegam ao container (opcionais sem valor
-    # vazio sobrescrevendo o appsettings.json).
+    # Só as chaves presentes no .env chegam ao container, para que opcionais
+    # sem valor não sobrescrevam o appsettings.json com string vazia.
     env_file:
       - ${STEAMTRACKER_ENV_FILE:?defina STEAMTRACKER_ENV_FILE}
     environment:

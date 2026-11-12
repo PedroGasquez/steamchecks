@@ -120,7 +120,7 @@ Uso: `./deploy/deploy.sh <ip> [caminho-da-chave]` (chave padrão
 ### 4.7 `deploy/README.md` (runbook)
 
 Primeiro uso (chave, criar VM, bootstrap), deploy, túnel
-(`ssh -i ~/.ssh/steamtracker_oci -L 8080:127.0.0.1:8080 ubuntu@<ip>`), logs,
+(`ssh -i ~/.ssh/steamtracker_oci -N -o ExitOnForwardFailure=yes -L 18080:127.0.0.1:8080 ubuntu@<ip>`), logs,
 reinício, `psql` no banco (`docker compose exec postgres psql -U steamtracker`),
 e onde mora o `.env`.
 

@@ -12,7 +12,7 @@ fi
 IP="$1"
 KEY="${2:-$HOME/.ssh/steamtracker_oci}"
 REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-SSH=(ssh -i "$KEY" "ubuntu@$IP")
+SSH=(ssh -i "$KEY" -o ServerAliveInterval=30 "ubuntu@$IP")
 
 if [ ! -f "$KEY" ]; then
   echo "Erro: chave SSH não encontrada em $KEY" >&2
@@ -26,7 +26,7 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 echo "==> Enviando código (git archive HEAD) para ~/steamtracker/src"
-git archive --format=tar HEAD | "${SSH[@]}" \
+git -c core.autocrlf=false archive --format=tar HEAD | "${SSH[@]}" \
   'rm -rf ~/steamtracker/src && mkdir -p ~/steamtracker/src && tar -x -C ~/steamtracker/src'
 
 echo "==> Subindo a stack na VM"
@@ -69,5 +69,18 @@ if [ "$up_rc" -ne 0 ] || [ "$migrate_rc" != "0" ]; then
   echo "ERRO: deploy falhou (docker compose up: $up_rc; migrate exit code: ${migrate_rc:-desconhecido})." >&2
   exit 1
 fi
-echo "Deploy concluído: migrate terminou com sucesso."
+
+# api e worker precisam estar rodando (com uma pequena tolerância de partida).
+running=0
+for _ in 1 2 3 4 5; do
+  running="$(compose ps --status running -q api worker | wc -l | tr -d ' ')"
+  [ "$running" -eq 2 ] && break
+  sleep 3
+done
+if [ "$running" -ne 2 ]; then
+  compose ps -a
+  echo "ERRO: api e worker deveriam estar rodando, mas só $running de 2 estão." >&2
+  exit 1
+fi
+echo "Deploy concluído: migrate terminou com sucesso e api/worker estão rodando."
 REMOTE

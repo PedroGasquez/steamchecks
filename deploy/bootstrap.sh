@@ -10,10 +10,13 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
   exit 1
 fi
 
+# Em VM recém-criada o cloud-init/unattended-upgrades seguram o lock do apt.
+cloud-init status --wait >/dev/null 2>&1 </dev/null || true
+
 export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
-apt-get update </dev/null
-apt-get install -y ca-certificates curl </dev/null
+apt-get -o DPkg::Lock::Timeout=300 update </dev/null
+apt-get -o DPkg::Lock::Timeout=300 install -y ca-certificates curl </dev/null
 
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc </dev/null
@@ -24,8 +27,8 @@ chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${UBUNTU_CODENAME:-$VERSION_CODENAME} stable" \
   > /etc/apt/sources.list.d/docker.list
 
-apt-get update </dev/null
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin </dev/null
+apt-get -o DPkg::Lock::Timeout=300 update </dev/null
+apt-get -o DPkg::Lock::Timeout=300 install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin </dev/null
 
 systemctl enable --now docker </dev/null
 usermod -aG docker ubuntu </dev/null

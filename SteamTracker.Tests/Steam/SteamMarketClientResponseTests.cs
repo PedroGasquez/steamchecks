@@ -53,6 +53,18 @@ public class SteamMarketClientResponseTests
     }
 
     [Fact]
+    public async Task GetPriceAsync_SuccessTrueComPrecoNaoParseavel_RetornaResultadoParcial()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK,
+            """{"success":true,"lowest_price":"abc"}""");
+
+        var result = await CriarClient(handler).GetPriceAsync(730, "Item Qualquer", 7);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.LowestPrice);
+    }
+
+    [Fact]
     public async Task GetPriceAsync_SuccessTrueSoComMedianaEVolume_RetornaResultadoParcial()
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK,

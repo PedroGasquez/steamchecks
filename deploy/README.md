@@ -27,6 +27,12 @@ dc ps -a              # migrate deve ter Exited (0)
   (`restart: unless-stopped`). Para o coletor voltar após reiniciar o Windows,
   ative "Start Docker Desktop when you sign in" nas configurações do Docker Desktop.
 - Parar sem perder dados: `dc stop`. **Nunca** `dc down -v` (apaga o histórico).
+  Depois de `dc stop` os containers **não** voltam com o reinício do Docker
+  Desktop (`unless-stopped` respeita o stop manual): rode `dc up -d` de novo.
+- As linhas `export`/`alias` valem só para o terminal atual; repita-as em um
+  terminal novo.
+- Quando a VM entrar no ar, rode `dc stop` na stack do PC para não haver dois
+  coletores gravando em dois bancos.
 - Ao migrar para a VM, o histórico do PC não vai junto automaticamente
   (exportar com `pg_dump` se quiser levar).
 
@@ -82,10 +88,17 @@ Repetir o deploy não recria o `.env` nem mexe no volume do banco.
 
 ## 6. Operação
 
-Túnel para a Api (deixe aberto; depois acesse `http://127.0.0.1:8080`):
+Túnel para a Api (deixe aberto; depois acesse `http://127.0.0.1:18080`; a porta local é 18080 para não colidir com a stack do PC em 8080):
 
 ```bash
-ssh -i ~/.ssh/steamtracker_oci -N -L 8080:127.0.0.1:8080 ubuntu@<ip>
+ssh -i ~/.ssh/steamtracker_oci -N -o ExitOnForwardFailure=yes -L 18080:127.0.0.1:8080 ubuntu@<ip>
+```
+
+Limpeza ocasional de disco na VM (nunca com `--volumes`; jamais
+`docker system prune --volumes`, que apagaria o banco):
+
+```bash
+docker image prune -f && docker builder prune -f --filter until=168h
 ```
 
 Conecte na VM e use, dentro de `~/steamtracker/src`:

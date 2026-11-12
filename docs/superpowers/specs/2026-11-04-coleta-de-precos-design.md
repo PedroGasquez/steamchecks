@@ -108,7 +108,8 @@ Resposta final da Steam (depois do pipeline de retry):
 
 | Resposta | Resultado |
 |---|---|
-| 2xx com `success:true` | `MarketPriceResult` (inalterado) |
+| 2xx com `success:true` e ao menos um campo de mercado | `MarketPriceResult` |
+| 2xx com `success:true` sem nenhum campo de mercado (os três ausentes/vazios) | `null` (item inexistente ou sem dados de mercado; comportamento real da Steam confirmado em 2026-11-12) |
 | Corpo JSON `{"success":false}`, qualquer status | `null` (item não existe / sem mercado) |
 | 429 ou 5xx sem esse corpo | lança `SteamMarketUnavailableException` |
 | Outros status não-2xx (400, 404…) | `null` |
