@@ -36,7 +36,13 @@ ENV_FILE="$HOME/steamtracker/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "Criando $ENV_FILE (senha gerada na VM)"
-  ( umask 077; printf 'POSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 32)" > "$ENV_FILE" )
+  pg_password="$(openssl rand -hex 32)"
+  if [ -z "$pg_password" ]; then
+    echo "ERRO: falha ao gerar a senha (openssl rand); $ENV_FILE não foi criado." >&2
+    exit 1
+  fi
+  ( umask 077; printf 'POSTGRES_PASSWORD=%s\n' "$pg_password" > "$ENV_FILE" )
+  unset pg_password
   chmod 600 "$ENV_FILE"
 else
   echo "$ENV_FILE já existe; mantido."
