@@ -12,7 +12,7 @@ cada dia de trabalho.
 ## Stack confirmada
 
 - .NET 9
-- PostgreSQL (via `Npgsql.EntityFrameworkCore.PostgreSQL`, a entrar na Semana 3)
+- PostgreSQL 17 (via `Npgsql.EntityFrameworkCore.PostgreSQL`; local via `docker-compose.yml`)
 - ASP.NET Core (API) + Worker Service
 - EF Core · Polly · Serilog · Blazor · Docker · GitHub Actions
 - Deploy alvo: Railway (a decidir na Semana 6)
@@ -242,7 +242,8 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   durante o shutdown do Worker não derruba mais o `ExecuteTask`.
 - Testes: 79 passando (SQLite em memória + `WebApplicationFactory`, sem Postgres
   e sem rede). Compila limpo.
-- **Pendências**: (1) a migration continua **nunca aplicada em Postgres real**;
+- **Pendências**: (1) a migration continua **nunca aplicada em Postgres real**
+  (**resolvido no Dia 10**);
   (2) o status HTTP da Steam para item inexistente não foi confirmado. Se a
   Steam devolver 500 + `{"success":false}` para nomes desconhecidos, o retry e o
   circuit breaker (`IsTransientFailure` em
@@ -252,19 +253,72 @@ Retorno: `lowest_price`, `median_price`, `volume` — todos string formatada.
   só recebe 503 após ~14 s de backoff, pois o retry também trata
   `BrokenCircuitException` como transitória), e um item rastreado que passe a
   devolver 500+`success:false` pode abortar todos os ciclos do Worker para os
-  itens seguintes. Correção planejada no Dia 9: confirmar contra a API real; se
-  for 500, excluir corpos `success:false` do `ShouldHandle`.
+  itens seguintes. **Resolvido no Dia 9** (de forma defensiva, ver abaixo).
+
+### ✅ Semana 1, Dia 9 — `success:false` não é falha transitória
+- **Problema** (pendência 2 do Dia 8): se a Steam responder 500 +
+  `{"success":false}` para item inexistente, o retry e o circuit breaker
+  tratavam isso como falha — um nome digitado errado abria o circuito por 30 s
+  e um item fora do mercado podia abortar os ciclos do Worker.
+- **Tentativa de confirmar contra a API real (09/11)**: a Steam **não
+  respondeu desta máquina** (timeout no `curl` e no PowerShell, dentro e fora
+  do sandbox), enquanto o GitHub respondia normalmente. Pode ser instabilidade
+  da Steam ou bloqueio do IP (o risco de shadow-ban já anotado). Não deu pra
+  saber se o status de item inexistente é 200 ou 500.
+- **Correção defensiva, que vale nos dois cenários**: o predicado da Polly
+  (`IsTransientFailure` → `IsTransientFailureAsync` em `DependencyInjection.cs`)
+  passa a ler o corpo de respostas 429/5xx; se for `{"success":false}`, a
+  resposta é definitiva (item inexistente): sem retry e sem contar falha no
+  circuit breaker. Qualquer outro 429/5xx continua transitório. Se a Steam
+  devolver 200 nesse caso, nada muda. A checagem "corpo é `success:false`"
+  virou `SteamPriceOverviewResponse.IsSuccessFalse`, usada também pelo client.
+- Detalhe: o predicado roda antes do client ler a resposta.
+  `ReadAsStringAsync` bufferiza o conteúdo, então o client ainda consegue ler
+  o corpo — um teste com stream sem seek trava isso.
+- Testes: 87 passando (+8: 429/500 com `success:false` não são transitórios;
+  500 com HTML/JSON sem `success`/vazio continua transitório; corpo ainda
+  legível depois do predicado; uma única tentativa no retry; 4 respostas
+  `success:false` não abrem o circuito). Compila limpo.
+
+### ✅ Semana 1, Dia 10 — Migration validada em Postgres real
+- **`docker-compose.yml`** na raiz: Postgres 17 com as mesmas credenciais do
+  `appsettings.Development.json` (senha fraca de propósito, só local), volume
+  nomeado e healthcheck. Subir o banco do zero:
+  `docker compose up -d` → `dotnet tool restore` →
+  `dotnet ef database update --project SteamTracker.Infrastructure --startup-project SteamTracker.Api`.
+- **Migration `InitialCreate` aplicada de verdade** (fecha a pendência aberta no
+  Dia 7). Schema conferido no `psql`: `jsonb` em `MedianPrice`/`TargetPrice`,
+  `numeric(18,2)` + `varchar(3)` no `Money` obrigatório, `timestamptz` nas
+  datas, índice único `(AppId, MarketHashName)`, índice
+  `(TrackedItemId, CapturedAt)`, FKs com cascade. O "Failed executing DbCommand"
+  sobre `__EFMigrationsHistory` na primeira execução é esperado (o EF consulta
+  a tabela antes de criá-la).
+- **Gravação/leitura real** (programa descartável, sem Steam — ela segue sem
+  responder desta máquina): `Money?` em `jsonb` volta com o valor certo
+  (conteúdo cru `{"Amount": 12.00, "Currency": "BRL"}`), `null` volta `null`,
+  moeda normalizada para maiúsculas, nome com `™` e `|` idêntico, datas com
+  `Kind = Utc`, duplicata barrada pelo índice único (`23505`). Confirma no
+  Postgres a correção do `MoneyJsonConversion` do Dia 8, antes só testada no
+  SQLite.
+- **API contra o Postgres**: `GET /api/items/{id}/snapshots` devolveu os
+  snapshots em ordem decrescente com `capturedAt` em UTC (`...Z`); 404 para item
+  inexistente; `POST /api/items` duplicado → 409 e inválido → 400. O POST de um
+  item novo não foi testado (depende da Steam).
+- Dica operacional: rodar a Api de dentro de `SteamTracker.Api/` (ou via
+  `launchSettings`). `dotnet run --project ... --no-launch-profile` a partir da
+  raiz usa a raiz como content root, não acha o `appsettings.Development.json`
+  e falha com "Connection string 'SteamTracker' não configurada".
+- Sem mudança de código de produção neste dia; suíte segue 87/87.
 
 ---
 
-## ⏭️ PRÓXIMO: Semana 1, Dia 9
+## ⏭️ PRÓXIMO: Semana 1, Dia 11
 
-Candidatos: (1) confirmar o status da Steam para item inexistente e, se for 500,
-excluir corpos `success:false` do `ShouldHandle` da Polly (ver Pendências do
-Dia 8); (2) validar a migration contra um Postgres real (Docker ou
-instalação local) e rodar `dotnet ef database update`; (3) alertas (`Alert`)
-avaliados pelo Worker a cada coleta; (4) `GET /api/items` para listar os itens
-rastreados. Dívidas menores da revisão: teste que monte o host real do Worker
+Candidatos: (1) alertas (`Alert`) avaliados pelo Worker a cada coleta;
+(2) `GET /api/items` para listar os itens rastreados; (3) quando a Steam voltar
+a responder desta máquina, testar ponta a ponta o `POST /api/items` com item
+novo e o Worker gravando no Postgres (e confirmar, só por curiosidade, o status
+de item inexistente). Dívidas menores da revisão: teste que monte o host real do Worker
 (pegaria registro faltando no `Program.cs`) e desempate por `Id` na ordenação
 dos snapshots com mesmo `CapturedAt`. O
 arquivo `backlog-steam-tracker-v2.md` referenciado no topo deste documento
@@ -276,5 +330,5 @@ recriar o roadmap.
 ## Como retomar
 
 Em qualquer ferramenta nova, diga:
-> "Estamos no Dia 8 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
+> "Estamos no Dia 10 do backlog. Leia PROGRESS.md e backlog-steam-tracker-v2.md
 > no repo e continue daí."
